@@ -43,7 +43,8 @@ password_management_application/
 │       ├── auth.js             ← Login logic
 │       ├── dashboard.js        ← Vault CRUD, generator
 │       └── admin.js            ← Admin user management
-├── passenger_wsgi.py           ← Plesk Phusion Passenger entry point
+├── passenger_wsgi.py           ← Phusion Passenger entry point
+├── .htaccess                   ← Tells Passenger which Python/venv to use
 └── README.md
 ```
 
@@ -132,9 +133,12 @@ App runs at: `http://localhost:5000`
 
 ---
 
-## Plesk Deployment (Python / Phusion Passenger)
+## Plesk Deployment (Phusion Passenger — no Python UI required)
 
 Follow these steps exactly on your Plesk server.
+
+> **Note:** This setup uses Phusion Passenger directly via `.htaccess`.
+> You do **not** need the Plesk Python UI panel.
 
 ### Step 1 – Create a Domain / Subdomain in Plesk
 
@@ -159,17 +163,19 @@ Upload the entire project folder to the document root via FTP, SFTP, or Plesk Fi
 
 ---
 
-### Step 3 – Enable Python in Plesk
+### Step 3 – Create `.htaccess` to Configure Passenger
 
-1. In Plesk → **Websites & Domains** → your domain
-2. Click **Python** (under Dev Tools or Additional Services)
-3. Enable **Python support**
-4. Set:
-   - **Python version**: `3.10` or higher
-   - **Application root**: `/` (the domain root — where `passenger_wsgi.py` is)
-   - **Application startup file**: `passenger_wsgi.py`
-   - **Application entry point**: `application`
-5. Click **OK / Apply**
+Create `.htaccess` in the domain root (same folder as `passenger_wsgi.py`):
+
+```apache
+PassengerEnabled on
+PassengerAppRoot /var/www/vhosts/yourcompany.com/vault.yourcompany.com
+PassengerPython /var/www/vhosts/yourcompany.com/vault.yourcompany.com/venv/bin/python
+```
+
+> Replace the paths with your actual domain root. The `PassengerPython` line
+> is critical — it tells Passenger to use the venv you create in Step 4,
+> instead of the system Python (which won't have your packages installed).
 
 ---
 
@@ -226,13 +232,18 @@ Paste the output as `ENCRYPTION_KEY=...` in `.env`.
 
 ---
 
-### Step 7 – Set Virtual Environment Path in Plesk
+### Step 7 – Verify `.htaccess` Paths Match Your venv
 
-Back in Plesk → Python settings for your domain:
+Open `.htaccess` and confirm the `PassengerPython` path matches the venv
+you created in Step 4:
 
-- **Virtual environment path**: `/var/www/vhosts/yourcompany.com/vault.yourcompany.com/venv`
+```bash
+# The path must point to the python binary inside your venv
+ls /var/www/vhosts/yourcompany.com/vault.yourcompany.com/venv/bin/python
+```
 
-Click **Apply**.
+If the path is correct, no further Plesk UI configuration is needed —
+Passenger reads `.htaccess` automatically.
 
 ---
 
@@ -272,10 +283,11 @@ Login with:
 | Problem | Solution |
 |---------|----------|
 | 500 Internal Server Error | Check Plesk error logs at `logs/error_log`. Usually a missing `.env` or wrong DB credentials |
+| Passenger uses wrong Python | Verify `PassengerPython` in `.htaccess` points to `venv/bin/python` |
 | Cannot connect to DB | Verify `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` in `.env` |
-| `ENCRYPTION_KEY` error | Generate key and add to `.env` |
+| `ENCRYPTION_KEY` error | Generate key and add to `backend/.env` |
 | Changes not reflecting | Restart app via Plesk or `touch tmp/restart.txt` |
-| Login page not loading | Ensure `passenger_wsgi.py` is in the domain root (not inside `backend/`) |
+| Login page not loading | Ensure `passenger_wsgi.py` and `.htaccess` are in the domain root (not inside `backend/`) |
 
 ---
 

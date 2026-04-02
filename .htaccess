@@ -1,0 +1,3 @@
+PassengerEnabled on
+PassengerAppRoot /var/www/vhosts/yourcompany.com/vault.yourcompany.com
+PassengerPython /var/www/vhosts/yourcompany.com/vault.yourcompany.com/venv/bin/python
