@@ -1,0 +1,38 @@
+name: Deploy to Plesk
+
+# Only trigger when code is pushed to main branch
+# Feature branch pushes will NOT trigger this workflow
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Plesk Webhook
+        run: |
+          echo "🚀 Triggering deployment to nextgen.codesen.com..."
+
+          RESPONSE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            -X POST https://nextgen.codesen.com/deploy-webhook \
+            -H "X-Deploy-Token: ${{ secrets.DEPLOY_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"branch\": \"${{ github.ref_name }}\",
+              \"commit\": \"${{ github.sha }}\",
+              \"pusher\": \"${{ github.actor }}\"
+            }")
+
+          echo "Server response:"
+          cat /tmp/response.txt
+          echo ""
+
+          if [ "$RESPONSE" != "200" ]; then
+            echo "❌ Deployment failed — server returned HTTP $RESPONSE"
+            exit 1
+          fi
+
+          echo "✓ Deployment triggered successfully!"
