@@ -25,7 +25,7 @@ async function apiFetch(path, options = {}) {
       ...options.headers
     }
   });
-  if (res.status === 401 || res.status === 422) { logout(); return null; }
+  if (res.status === 401) { logout(); return null; }
   return res;
 }
 
