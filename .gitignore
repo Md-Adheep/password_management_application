@@ -1,7 +1,11 @@
 backend/.env
+flask/.env
+.env
 backend/venv/
 venv/
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 .DS_Store
+flask/tmp/
