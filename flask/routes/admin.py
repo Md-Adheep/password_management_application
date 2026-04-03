@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
 from functools import wraps
 from extensions import db
 from models import User, PasswordEntry
@@ -9,10 +9,12 @@ admin_bp = Blueprint('admin', __name__)
 
 def admin_required(fn):
     @wraps(fn)
-    @jwt_required()
     def wrapper(*args, **kwargs):
+        verify_jwt_in_request()
+        claims = get_jwt()
         identity = get_jwt_identity()
-        if identity.get('role') != 'admin':
+        role = claims.get('role') or (identity.get('role') if isinstance(identity, dict) else None)
+        if role != 'admin':
             return jsonify({'message': 'Admin access required'}), 403
         return fn(*args, **kwargs)
     return wrapper

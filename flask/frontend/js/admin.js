@@ -25,7 +25,7 @@ async function apiFetch(path, options = {}) {
       ...options.headers
     }
   });
-  if (res.status === 401) { logout(); return null; }
+  if (res.status === 401 || res.status === 422) { logout(); return null; }
   return res;
 }
 
@@ -158,10 +158,10 @@ async function saveUser() {
   btn.textContent = editingUserId ? 'Update User' : 'Save User';
 
   if (!res || !res.ok) {
-    let msg = 'Save failed.';
+    let msg = `Save failed (HTTP ${res ? res.status : 'error'}).`;
     try {
       const err = res ? await res.json() : {};
-      if (err.message) msg = err.message;
+      msg = err.message || err.msg || msg;
     } catch (_) {}
     showModalAlert(alertEl, 'danger', msg);
     return;

@@ -23,7 +23,10 @@ def login():
     user.last_login = datetime.now(timezone.utc)
     db.session.commit()
 
-    token = create_access_token(identity={'id': user.id, 'role': user.role})
+    token = create_access_token(
+        identity={'id': user.id, 'role': user.role},
+        additional_claims={'role': user.role}
+    )
     return jsonify({
         'token': token,
         'user': user.to_dict()
