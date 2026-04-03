@@ -15,7 +15,7 @@ def get_passwords():
     search = request.args.get('search', '').strip()
     category = request.args.get('category', '').strip()
 
-    query = PasswordEntry.query.filter_by(user_id=identity['id'])
+    query = PasswordEntry.query.filter_by(user_id=identity)
     if search:
         query = query.filter(PasswordEntry.title.ilike(f'%{search}%'))
     if category:
@@ -29,7 +29,7 @@ def get_passwords():
 @jwt_required()
 def get_decrypted_password(entry_id):
     identity = get_jwt_identity()
-    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity['id']).first()
+    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity).first()
     if not entry:
         return jsonify({'message': 'Entry not found'}), 404
 
@@ -51,7 +51,7 @@ def create_password():
         return jsonify({'message': 'Title and password are required'}), 400
 
     entry = PasswordEntry(
-        user_id=identity['id'],
+        user_id=identity,
         title=data['title'],
         username=data.get('username', ''),
         encrypted_password=encrypt_password(data['password']),
@@ -68,7 +68,7 @@ def create_password():
 @jwt_required()
 def update_password(entry_id):
     identity = get_jwt_identity()
-    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity['id']).first()
+    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity).first()
     if not entry:
         return jsonify({'message': 'Entry not found'}), 404
 
@@ -94,7 +94,7 @@ def update_password(entry_id):
 @jwt_required()
 def delete_password(entry_id):
     identity = get_jwt_identity()
-    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity['id']).first()
+    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity).first()
     if not entry:
         return jsonify({'message': 'Entry not found'}), 404
 
@@ -121,7 +121,7 @@ def generate():
 def get_categories():
     identity = get_jwt_identity()
     rows = db.session.query(PasswordEntry.category).filter_by(
-        user_id=identity['id']
+        user_id=identity
     ).distinct().all()
     categories = [r[0] for r in rows]
     return jsonify(categories), 200

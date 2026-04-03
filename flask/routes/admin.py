@@ -12,9 +12,7 @@ def admin_required(fn):
     def wrapper(*args, **kwargs):
         verify_jwt_in_request()
         claims = get_jwt()
-        identity = get_jwt_identity()
-        role = claims.get('role') or (identity.get('role') if isinstance(identity, dict) else None)
-        if role != 'admin':
+        if claims.get('role') != 'admin':
             return jsonify({'message': 'Admin access required'}), 403
         return fn(*args, **kwargs)
     return wrapper
@@ -83,7 +81,7 @@ def update_user(user_id):
 @admin_required
 def delete_user(user_id):
     identity = get_jwt_identity()
-    if identity['id'] == user_id:
+    if identity == user_id:
         return jsonify({'message': 'Cannot delete your own account'}), 400
 
     user = User.query.get(user_id)
