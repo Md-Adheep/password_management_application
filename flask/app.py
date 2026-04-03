@@ -24,15 +24,6 @@ def create_app():
     app.register_blueprint(passwords_bp, url_prefix='/api/passwords')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
-    # JWT error handlers
-    @jwt.expired_token_loader
-    def expired_token_callback(jwt_header, jwt_payload):
-        return jsonify({'message': 'Session expired. Please login again.'}), 401
-
-    @jwt.unauthorized_loader
-    def missing_token_callback(error):
-        return jsonify({'message': 'Authentication required.'}), 401
-
     # Global error handler — always return JSON
     @app.errorhandler(Exception)
     def handle_exception(e):

@@ -23,10 +23,7 @@ def login():
     user.last_login = datetime.now(timezone.utc)
     db.session.commit()
 
-    token = create_access_token(
-        identity=user.id,
-        additional_claims={'role': user.role}
-    )
+    token = create_access_token(identity={'id': user.id, 'role': user.role})
     return jsonify({
         'token': token,
         'user': user.to_dict()
@@ -37,7 +34,7 @@ def login():
 @jwt_required()
 def get_me():
     identity = get_jwt_identity()
-    user = User.query.get(identity)
+    user = User.query.get(identity['id'])
     if not user:
         return jsonify({'message': 'User not found'}), 404
     return jsonify(user.to_dict()), 200
@@ -52,7 +49,7 @@ def change_password():
     if not data or not data.get('current_password') or not data.get('new_password'):
         return jsonify({'message': 'Current and new password required'}), 400
 
-    user = User.query.get(identity)
+    user = User.query.get(identity['id'])
     if not user.check_password(data['current_password']):
         return jsonify({'message': 'Current password is incorrect'}), 400
 
