@@ -32,7 +32,6 @@ async function apiFetch(path, options = {}) {
     }
   });
   if (res.status === 401) { logout(); return null; }
-  if (res.status === 422) { logout(); return null; }
   return res;
 }
 
