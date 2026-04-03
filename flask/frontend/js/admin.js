@@ -158,8 +158,12 @@ async function saveUser() {
   btn.textContent = editingUserId ? 'Update User' : 'Save User';
 
   if (!res || !res.ok) {
-    const err = res ? await res.json() : {};
-    showModalAlert(alertEl, 'danger', err.message || 'Save failed.');
+    let msg = 'Save failed.';
+    try {
+      const err = res ? await res.json() : {};
+      if (err.message) msg = err.message;
+    } catch (_) {}
+    showModalAlert(alertEl, 'danger', msg);
     return;
   }
 

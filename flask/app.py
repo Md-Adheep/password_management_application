@@ -1,6 +1,6 @@
 import os
 import sys
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify
 from config import Config
 from extensions import db, bcrypt, jwt, cors
 from routes.auth import auth_bp
@@ -23,6 +23,28 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(passwords_bp, url_prefix='/api/passwords')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+
+    # JWT error handlers
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return jsonify({'message': 'Token has expired. Please login again.'}), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error):
+        return jsonify({'message': 'Invalid token. Please login again.'}), 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        return jsonify({'message': 'Authentication required.'}), 401
+
+    # Global error handler — always return JSON
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        from werkzeug.exceptions import HTTPException
+        if isinstance(e, HTTPException):
+            return jsonify({'message': e.description}), e.code
+        app.logger.error(f'Unhandled exception: {e}', exc_info=True)
+        return jsonify({'message': 'An internal server error occurred.'}), 500
 
     @app.route('/')
     def index():

@@ -47,8 +47,12 @@ def create_user():
         role=data.get('role', 'user')
     )
     user.set_password(data['password'])
-    db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Database error: {str(e)}'}), 500
     return jsonify(user.to_dict()), 201
 
 
