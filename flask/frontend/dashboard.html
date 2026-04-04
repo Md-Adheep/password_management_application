@@ -24,6 +24,9 @@
         <a href="admin.html" class="btn btn-sm btn-outline-warning d-none" id="admin-link">
           <i class="bi bi-gear me-1"></i>Admin
         </a>
+        <button class="btn btn-sm btn-outline-light" id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+          <i class="bi bi-moon-fill" id="dark-mode-icon"></i>
+        </button>
         <button class="btn btn-sm btn-outline-danger" id="logout-btn">
           <i class="bi bi-box-arrow-right"></i>
         </button>
@@ -67,16 +70,25 @@
     <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
       <div class="input-group" style="max-width:300px">
         <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" class="form-control" id="search-input" placeholder="Search passwords..." />
+        <input type="text" class="form-control" id="search-input" placeholder="Search title, username, URL..." />
       </div>
       <select class="form-select w-auto" id="category-filter">
         <option value="">All Categories</option>
       </select>
+      <button class="btn btn-outline-warning" id="favorites-btn" onclick="toggleFavoritesFilter()" title="Show Favorites">
+        <i class="bi bi-star me-1"></i>Favorites
+      </button>
       <button class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#passwordModal" onclick="openAddModal()">
         <i class="bi bi-plus-lg me-1"></i>Add Password
       </button>
       <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#generatorModal">
         <i class="bi bi-magic me-1"></i>Generator
+      </button>
+      <button class="btn btn-outline-success" onclick="exportPasswords()" title="Export to CSV">
+        <i class="bi bi-download me-1"></i>Export
+      </button>
+      <button class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#importModal" title="Import CSV">
+        <i class="bi bi-upload me-1"></i>Import
       </button>
     </div>
 
@@ -230,6 +242,35 @@
         <div class="modal-footer">
           <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
           <button class="btn btn-primary" onclick="changeMyPassword()">Update Password</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-upload me-2"></i>Import Passwords</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Supports <strong>Bitwarden CSV</strong> and generic CSV exports.<br>
+            Generic CSV columns: <code>name, username, password, url, notes, category</code>
+          </p>
+          <div class="mb-3">
+            <label class="form-label">Choose CSV file</label>
+            <input type="file" class="form-control" id="import-file" accept=".csv" />
+          </div>
+          <div id="import-alert" class="alert d-none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" id="import-btn" onclick="importPasswords()">
+            <i class="bi bi-upload me-1"></i>Import
+          </button>
         </div>
       </div>
     </div>

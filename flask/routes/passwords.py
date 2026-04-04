@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify
+import csv
+import io
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models import PasswordEntry
@@ -57,7 +59,8 @@ def create_password():
         encrypted_password=encrypt_password(data['password']),
         url=data.get('url', ''),
         notes=data.get('notes', ''),
-        category=data.get('category', 'General')
+        category=data.get('category', 'General'),
+        is_favorite=bool(data.get('is_favorite', False))
     )
     try:
         db.session.add(entry)
@@ -89,6 +92,8 @@ def update_password(entry_id):
         entry.notes = data['notes']
     if data.get('category'):
         entry.category = data['category']
+    if 'is_favorite' in data:
+        entry.is_favorite = bool(data['is_favorite'])
 
     db.session.commit()
     return jsonify(entry.to_dict()), 200
@@ -129,3 +134,109 @@ def get_categories():
     ).distinct().all()
     categories = [r[0] for r in rows]
     return jsonify(categories), 200
+
+
+# ─── Export CSV ───────────────────────────────────────────────────────────────
+
+@passwords_bp.route('/export', methods=['GET'])
+@jwt_required()
+def export_csv():
+    user_id = int(get_jwt_identity())
+    entries = PasswordEntry.query.filter_by(user_id=user_id).order_by(PasswordEntry.title).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['name', 'username', 'password', 'url', 'notes', 'category', 'favorite'])
+    for e in entries:
+        try:
+            pw = decrypt_password(e.encrypted_password)
+        except Exception:
+            pw = ''
+        writer.writerow([
+            e.title,
+            e.username or '',
+            pw,
+            e.url or '',
+            e.notes or '',
+            e.category or 'General',
+            '1' if e.is_favorite else '0'
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=corpvault_export.csv'}
+    )
+
+
+# ─── Import CSV ───────────────────────────────────────────────────────────────
+
+@passwords_bp.route('/import', methods=['POST'])
+@jwt_required()
+def import_csv():
+    user_id = int(get_jwt_identity())
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'message': 'No file provided'}), 400
+
+    try:
+        content = file.read().decode('utf-8-sig')  # utf-8-sig handles BOM from Excel/Bitwarden
+        reader = csv.DictReader(io.StringIO(content))
+        headers = [h.lower().strip() for h in (reader.fieldnames or [])]
+    except Exception as e:
+        return jsonify({'message': f'Could not read file: {str(e)}'}), 400
+
+    # Detect Bitwarden format
+    is_bitwarden = 'login_username' in headers or 'login_password' in headers
+
+    imported = 0
+    skipped = 0
+
+    for row in reader:
+        # Normalise keys to lowercase
+        row = {k.lower().strip(): v for k, v in row.items()}
+
+        if is_bitwarden:
+            # Skip non-login types (cards, identities, etc.)
+            if row.get('type', 'login') != 'login':
+                skipped += 1
+                continue
+            title    = row.get('name', '').strip()
+            username = row.get('login_username', '').strip()
+            password = row.get('login_password', '').strip()
+            url      = row.get('login_uri', '').strip()
+            notes    = row.get('notes', '').strip()
+            category = row.get('folder', 'General').strip() or 'General'
+        else:
+            title    = (row.get('name') or row.get('title', '')).strip()
+            username = row.get('username', '').strip()
+            password = row.get('password', '').strip()
+            url      = (row.get('url') or row.get('login_uri', '')).strip()
+            notes    = row.get('notes', '').strip()
+            category = (row.get('category') or row.get('folder', 'General')).strip() or 'General'
+
+        if not title or not password:
+            skipped += 1
+            continue
+
+        entry = PasswordEntry(
+            user_id=user_id,
+            title=title,
+            username=username,
+            encrypted_password=encrypt_password(password),
+            url=url,
+            notes=notes,
+            category=category,
+            is_favorite=False
+        )
+        db.session.add(entry)
+        imported += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Import failed: {str(e)}'}), 500
+
+    return jsonify({'imported': imported, 'skipped': skipped}), 200

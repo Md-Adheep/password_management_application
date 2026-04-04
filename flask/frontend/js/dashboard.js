@@ -7,6 +7,7 @@ if (!token || !user) { window.location.href = 'login.html'; }
 let allEntries = [];
 let editingId = null;
 let generatedPw = '';
+let showFavoritesOnly = false;
 
 // ─── Init ────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('search-input').addEventListener('input', renderCards);
   document.getElementById('category-filter').addEventListener('change', renderCards);
 
+  applyStoredTheme();
   loadPasswords();
 });
 
@@ -77,10 +79,14 @@ function renderCards() {
   const catFilter = document.getElementById('category-filter').value;
 
   const filtered = allEntries.filter(e => {
-    const matchSearch = !search || e.title.toLowerCase().includes(search) ||
-                        (e.username || '').toLowerCase().includes(search);
+    // Search by title, username, AND URL
+    const matchSearch = !search ||
+      e.title.toLowerCase().includes(search) ||
+      (e.username || '').toLowerCase().includes(search) ||
+      (e.url || '').toLowerCase().includes(search);
     const matchCat = !catFilter || e.category === catFilter;
-    return matchSearch && matchCat;
+    const matchFav = !showFavoritesOnly || e.is_favorite;
+    return matchSearch && matchCat && matchFav;
   });
 
   const grid = document.getElementById('password-grid');
@@ -105,6 +111,10 @@ function renderCards() {
             <div class="pw-card-sub">${escHtml(e.username || '—')}</div>
             <span class="pw-card-badge mt-1 d-inline-block">${escHtml(e.category || 'General')}</span>
           </div>
+          <button class="btn btn-sm border-0 p-0 fav-star${e.is_favorite ? ' active' : ''}"
+                  onclick="toggleFavorite(event, ${e.id})" title="${e.is_favorite ? 'Unstar' : 'Star'}">
+            <i class="bi bi-star${e.is_favorite ? '-fill text-warning' : ''}"></i>
+          </button>
         </div>
         <div class="pw-card-actions mt-3 d-flex justify-content-end">
           <button class="btn btn-sm btn-outline-primary" onclick="copyPasswordById(event, ${e.id})">
@@ -130,6 +140,30 @@ function getCategoryIcon(cat) {
 
 function escHtml(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Favorites ───────────────────────────────────────────────────────
+function toggleFavoritesFilter() {
+  showFavoritesOnly = !showFavoritesOnly;
+  const btn = document.getElementById('favorites-btn');
+  btn.classList.toggle('btn-warning', showFavoritesOnly);
+  btn.classList.toggle('btn-outline-warning', !showFavoritesOnly);
+  renderCards();
+}
+
+async function toggleFavorite(e, id) {
+  e.stopPropagation();
+  const entry = allEntries.find(en => en.id === id);
+  if (!entry) return;
+  const newVal = !entry.is_favorite;
+  const res = await apiFetch(`/passwords/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_favorite: newVal })
+  });
+  if (res && res.ok) {
+    entry.is_favorite = newVal;
+    renderCards();
+  }
 }
 
 // ─── View Entry ──────────────────────────────────────────────────────
@@ -275,6 +309,66 @@ async function deleteEntry(e, id) {
   }
 }
 
+// ─── Export CSV ──────────────────────────────────────────────────────
+async function exportPasswords() {
+  const res = await fetch(`${API}/passwords/export`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res || !res.ok) { showToast('Export failed.'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'corpvault_export.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Exported!');
+}
+
+// ─── Import CSV ──────────────────────────────────────────────────────
+async function importPasswords() {
+  const alertEl = document.getElementById('import-alert');
+  const fileInput = document.getElementById('import-file');
+  const btn = document.getElementById('import-btn');
+  const file = fileInput.files[0];
+
+  if (!file) {
+    alertEl.className = 'alert alert-danger';
+    alertEl.textContent = 'Please choose a CSV file.';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Importing...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API}/passwords/import`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+
+  btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Import';
+
+  if (!res || !res.ok) {
+    let msg = 'Import failed.';
+    try { const e = await res.json(); msg = e.message || msg; } catch (_) {}
+    alertEl.className = 'alert alert-danger';
+    alertEl.textContent = msg;
+    return;
+  }
+
+  const data = await res.json();
+  alertEl.className = 'alert alert-success';
+  alertEl.textContent = `✓ Imported ${data.imported} entries. Skipped ${data.skipped}.`;
+  fileInput.value = '';
+  await loadPasswords();
+  setTimeout(() => {
+    bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+  }, 1500);
+}
+
 // ─── Generator ──────────────────────────────────────────────────────
 async function generatePassword() {
   const length = document.getElementById('gen-length').value;
@@ -325,6 +419,21 @@ async function changeMyPassword() {
   if (!res || !res.ok) { showModalAlert(alertEl, 'danger', data.message || 'Failed.'); return; }
   showModalAlert(alertEl, 'success', 'Password updated successfully!');
   setTimeout(() => bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide(), 1200);
+}
+
+// ─── Dark Mode ───────────────────────────────────────────────────────
+function applyStoredTheme() {
+  const dark = localStorage.getItem('darkMode') === '1';
+  if (dark) {
+    document.body.classList.add('dark-mode');
+    document.getElementById('dark-mode-icon').className = 'bi bi-sun-fill';
+  }
+}
+
+function toggleDarkMode() {
+  const isDark = document.body.classList.toggle('dark-mode');
+  localStorage.setItem('darkMode', isDark ? '1' : '0');
+  document.getElementById('dark-mode-icon').className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────

@@ -45,6 +45,7 @@ class PasswordEntry(db.Model):
     url = db.Column(db.String(500), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     category = db.Column(db.String(80), default='General')
+    is_favorite = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -59,6 +60,7 @@ class PasswordEntry(db.Model):
             'url': self.url,
             'notes': self.notes,
             'category': self.category,
+            'is_favorite': bool(self.is_favorite),
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
