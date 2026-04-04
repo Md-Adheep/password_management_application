@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CorpVault – Teams</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <link href="css/style.css" rel="stylesheet" />
+</head>
+<body class="app-page">
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg app-navbar">
+    <div class="container-fluid px-4">
+      <span class="navbar-brand">
+        <i class="bi bi-shield-lock-fill me-2"></i>CorpVault
+      </span>
+      <div class="d-flex align-items-center gap-3 ms-auto">
+        <span class="text-muted small" id="nav-username"></span>
+        <a href="dashboard.html" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-key me-1"></i>My Vault
+        </a>
+        <a href="admin.html" class="btn btn-sm btn-outline-warning d-none" id="admin-link">
+          <i class="bi bi-gear me-1"></i>Admin
+        </a>
+        <button class="btn btn-sm btn-outline-danger" id="logout-btn">
+          <i class="bi bi-box-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid px-4 py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-people-fill me-2 text-primary"></i>Teams</h4>
+      <!-- Admin-only create button -->
+      <button class="btn btn-primary d-none" id="create-group-btn"
+              data-bs-toggle="modal" data-bs-target="#groupModal" onclick="openCreateGroup()">
+        <i class="bi bi-plus-lg me-1"></i>New Team
+      </button>
+    </div>
+
+    <!-- Groups list -->
+    <div class="row g-3" id="groups-grid">
+      <div class="col-12 text-center text-muted py-5" id="groups-empty">
+        <i class="bi bi-people display-4 d-block mb-2"></i>
+        No teams yet.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Group Detail Panel (shown when a group is selected) ─────────── -->
+  <div class="container-fluid px-4 pb-5 d-none" id="group-detail">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="closeGroupDetail()">
+            <i class="bi bi-arrow-left"></i>
+          </button>
+          <h5 class="mb-0 fw-bold" id="detail-group-name">Team</h5>
+          <span class="badge bg-primary bg-opacity-10 text-primary" id="detail-member-count"></span>
+        </div>
+        <div class="d-flex gap-2">
+          <!-- Manager/Admin can add members -->
+          <button class="btn btn-sm btn-outline-success d-none" id="add-member-btn"
+                  data-bs-toggle="modal" data-bs-target="#memberModal" onclick="openAddMember()">
+            <i class="bi bi-person-plus me-1"></i>Add Member
+          </button>
+          <!-- Any member can add passwords -->
+          <button class="btn btn-sm btn-primary"
+                  data-bs-toggle="modal" data-bs-target="#groupPwModal" onclick="openAddGroupPw()">
+            <i class="bi bi-plus-lg me-1"></i>Add Password
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="card-body p-0">
+        <ul class="nav nav-tabs px-3 pt-2" id="detail-tabs">
+          <li class="nav-item">
+            <button class="nav-link active" onclick="showTab('passwords')">
+              <i class="bi bi-key me-1"></i>Passwords
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" onclick="showTab('members')">
+              <i class="bi bi-people me-1"></i>Members
+            </button>
+          </li>
+        </ul>
+
+        <!-- Passwords Tab -->
+        <div id="tab-passwords" class="p-3">
+          <div class="row g-3" id="group-pw-grid">
+            <div class="col-12 text-center text-muted py-4" id="group-pw-empty">
+              <i class="bi bi-key display-4 d-block mb-2"></i>No passwords yet.
+            </div>
+          </div>
+        </div>
+
+        <!-- Members Tab -->
+        <div id="tab-members" class="p-3 d-none">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>User</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Joined</th>
+                  <th class="text-end d-none" id="members-actions-header">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="members-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Create/Edit Group Modal ────────────────────────────────────── -->
+  <div class="modal fade" id="groupModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="group-modal-title">New Team</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="group-edit-id" />
+          <div class="mb-3">
+            <label class="form-label">Team Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="g-name" placeholder="e.g. Engineering, Finance" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" id="g-desc" rows="2" placeholder="Optional description"></textarea>
+          </div>
+          <div id="group-modal-alert" class="alert d-none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" id="save-group-btn" onclick="saveGroup()">Create Team</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add Member Modal ───────────────────────────────────────────── -->
+  <div class="modal fade" id="memberModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Member</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Select User <span class="text-danger">*</span></label>
+            <select class="form-select" id="m-user-id"></select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="m-role">
+              <option value="member">Member</option>
+              <option value="manager">Manager</option>
+            </select>
+          </div>
+          <div id="member-modal-alert" class="alert d-none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" onclick="addMember()">Add Member</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add Group Password Modal ───────────────────────────────────── -->
+  <div class="modal fade" id="groupPwModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Team Password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Title <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="gp-title" placeholder="e.g. AWS Production" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Username / Email</label>
+            <input type="text" class="form-control" id="gp-username" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="password" class="form-control" id="gp-password" />
+              <button class="btn btn-outline-secondary" type="button" onclick="toggleGpPw()">
+                <i class="bi bi-eye" id="gp-pw-icon"></i>
+              </button>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">URL</label>
+            <input type="url" class="form-control" id="gp-url" placeholder="https://" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <input type="text" class="form-control" id="gp-category" placeholder="General" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" id="gp-notes" rows="2"></textarea>
+          </div>
+          <div id="gp-modal-alert" class="alert d-none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" id="save-gp-btn" onclick="saveGroupPassword()">Save Password</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Group Password Modal -->
+  <div class="modal fade" id="viewGpModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="view-gp-title">Password Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="view-gp-body"></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/teams.js"></script>
+</body>
+</html>

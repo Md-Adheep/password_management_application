@@ -28,7 +28,24 @@
   </nav>
 
   <div class="container-fluid px-4 py-4">
-    <h4 class="mb-4 fw-bold"><i class="bi bi-people-fill me-2 text-primary"></i>User Management</h4>
+    <h4 class="mb-4 fw-bold"><i class="bi bi-shield-lock me-2 text-primary"></i>Admin Panel</h4>
+
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-4" id="admin-tabs">
+      <li class="nav-item">
+        <button class="nav-link active" onclick="switchAdminTab('users')">
+          <i class="bi bi-people me-1"></i>Users
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" onclick="switchAdminTab('groups')">
+          <i class="bi bi-diagram-3 me-1"></i>Teams
+        </button>
+      </li>
+    </ul>
+
+    <!-- ── Users Tab ─────────────────────────────────────────────────── -->
+    <div id="admin-tab-users">
 
     <!-- Stats -->
     <div class="row g-3 mb-4">
@@ -82,6 +99,81 @@
             </thead>
             <tbody id="users-table"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- end #admin-tab-users -->
+
+    <!-- ── Groups Tab ────────────────────────────────────────────────── -->
+    <div id="admin-tab-groups" class="d-none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header d-flex align-items-center justify-content-between bg-white py-3">
+          <span class="fw-semibold">All Teams</span>
+          <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#adminGroupModal" onclick="openCreateAdminGroup()">
+            <i class="bi bi-plus-lg me-1"></i>New Team
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Team Name</th>
+                  <th>Description</th>
+                  <th>Members</th>
+                  <th>Created</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="groups-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div><!-- end #admin-tab-groups -->
+
+  </div>
+
+  <!-- Create / Edit Group Modal (Admin) -->
+  <div class="modal fade" id="adminGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="ag-modal-title">New Team</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="ag-edit-id" />
+          <div class="mb-3">
+            <label class="form-label">Team Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="ag-name" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" id="ag-desc" rows="2"></textarea>
+          </div>
+          <div id="ag-modal-alert" class="alert d-none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" id="ag-save-btn" onclick="saveAdminGroup()">Create Team</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Group Modal -->
+  <div class="modal fade" id="deleteGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>Delete Team</h5>
+        </div>
+        <div class="modal-body" id="delete-group-confirm-text">Are you sure?</div>
+        <div class="modal-footer border-0">
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="confirm-delete-group-btn">Delete</button>
         </div>
       </div>
     </div>
