@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
 from functools import wraps
 from extensions import db
 from models import User, PasswordEntry
@@ -11,8 +11,8 @@ def admin_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         verify_jwt_in_request()
-        identity = get_jwt_identity()
-        if not isinstance(identity, dict) or identity.get('role') != 'admin':
+        claims = get_jwt()
+        if claims.get('role') != 'admin':
             return jsonify({'message': 'Admin access required'}), 403
         return fn(*args, **kwargs)
     return wrapper
@@ -64,6 +64,14 @@ def update_user(user_id):
         return jsonify({'message': 'User not found'}), 404
 
     data = request.get_json()
+    if 'username' in data:
+        if User.query.filter(User.username == data['username'], User.id != user_id).first():
+            return jsonify({'message': 'Username already exists'}), 409
+        user.username = data['username']
+    if 'email' in data:
+        if User.query.filter(User.email == data['email'], User.id != user_id).first():
+            return jsonify({'message': 'Email already exists'}), 409
+        user.email = data['email']
     if 'is_active' in data:
         user.is_active = data['is_active']
     if 'role' in data and data['role'] in ('admin', 'user'):
@@ -80,8 +88,8 @@ def update_user(user_id):
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id):
-    identity = get_jwt_identity()
-    if identity == user_id:
+    current_user_id = int(get_jwt_identity())
+    if current_user_id == user_id:
         return jsonify({'message': 'Cannot delete your own account'}), 400
 
     user = User.query.get(user_id)

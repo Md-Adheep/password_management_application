@@ -11,11 +11,11 @@ passwords_bp = Blueprint('passwords', __name__)
 @passwords_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_passwords():
-    identity = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     search = request.args.get('search', '').strip()
     category = request.args.get('category', '').strip()
 
-    query = PasswordEntry.query.filter_by(user_id=identity['id'])
+    query = PasswordEntry.query.filter_by(user_id=user_id)
     if search:
         query = query.filter(PasswordEntry.title.ilike(f'%{search}%'))
     if category:
@@ -28,8 +28,8 @@ def get_passwords():
 @passwords_bp.route('/<int:entry_id>/decrypt', methods=['GET'])
 @jwt_required()
 def get_decrypted_password(entry_id):
-    identity = get_jwt_identity()
-    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity['id']).first()
+    user_id = int(get_jwt_identity())
+    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=user_id).first()
     if not entry:
         return jsonify({'message': 'Entry not found'}), 404
 
@@ -44,14 +44,14 @@ def get_decrypted_password(entry_id):
 @passwords_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_password():
-    identity = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json()
 
     if not data or not data.get('title') or not data.get('password'):
         return jsonify({'message': 'Title and password are required'}), 400
 
     entry = PasswordEntry(
-        user_id=identity['id'],
+        user_id=user_id,
         title=data['title'],
         username=data.get('username', ''),
         encrypted_password=encrypt_password(data['password']),
@@ -71,8 +71,8 @@ def create_password():
 @passwords_bp.route('/<int:entry_id>', methods=['PUT'])
 @jwt_required()
 def update_password(entry_id):
-    identity = get_jwt_identity()
-    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity['id']).first()
+    user_id = int(get_jwt_identity())
+    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=user_id).first()
     if not entry:
         return jsonify({'message': 'Entry not found'}), 404
 
@@ -97,8 +97,8 @@ def update_password(entry_id):
 @passwords_bp.route('/<int:entry_id>', methods=['DELETE'])
 @jwt_required()
 def delete_password(entry_id):
-    identity = get_jwt_identity()
-    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=identity['id']).first()
+    user_id = int(get_jwt_identity())
+    entry = PasswordEntry.query.filter_by(id=entry_id, user_id=user_id).first()
     if not entry:
         return jsonify({'message': 'Entry not found'}), 404
 
@@ -123,9 +123,9 @@ def generate():
 @passwords_bp.route('/categories', methods=['GET'])
 @jwt_required()
 def get_categories():
-    identity = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     rows = db.session.query(PasswordEntry.category).filter_by(
-        user_id=identity['id']
+        user_id=user_id
     ).distinct().all()
     categories = [r[0] for r in rows]
     return jsonify(categories), 200

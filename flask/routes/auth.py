@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from extensions import db
 from models import User
 
@@ -23,7 +23,10 @@ def login():
     user.last_login = datetime.now(timezone.utc)
     db.session.commit()
 
-    token = create_access_token(identity={'id': user.id, 'role': user.role})
+    token = create_access_token(
+        identity=str(user.id),
+        additional_claims={'role': user.role}
+    )
     return jsonify({
         'token': token,
         'user': user.to_dict()
@@ -33,8 +36,8 @@ def login():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def get_me():
-    identity = get_jwt_identity()
-    user = User.query.get(identity['id'])
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
     if not user:
         return jsonify({'message': 'User not found'}), 404
     return jsonify(user.to_dict()), 200
@@ -43,13 +46,13 @@ def get_me():
 @auth_bp.route('/change-password', methods=['PUT'])
 @jwt_required()
 def change_password():
-    identity = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json()
 
     if not data or not data.get('current_password') or not data.get('new_password'):
         return jsonify({'message': 'Current and new password required'}), 400
 
-    user = User.query.get(identity['id'])
+    user = User.query.get(user_id)
     if not user.check_password(data['current_password']):
         return jsonify({'message': 'Current password is incorrect'}), 400
 
