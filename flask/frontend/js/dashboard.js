@@ -250,8 +250,12 @@ async function savePassword() {
   btn.textContent = 'Save';
 
   if (!res || !res.ok) {
-    const err = res ? await res.json() : {};
-    showModalAlert(alertEl, 'danger', err.message || 'Save failed.');
+    let msg = `Save failed (HTTP ${res ? res.status : 'error'}).`;
+    try {
+      const err = res ? await res.json() : {};
+      msg = err.message || err.msg || msg;
+    } catch (_) {}
+    showModalAlert(alertEl, 'danger', msg);
     return;
   }
 

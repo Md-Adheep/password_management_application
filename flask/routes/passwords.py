@@ -59,8 +59,12 @@ def create_password():
         notes=data.get('notes', ''),
         category=data.get('category', 'General')
     )
-    db.session.add(entry)
-    db.session.commit()
+    try:
+        db.session.add(entry)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Database error: {str(e)}'}), 500
     return jsonify(entry.to_dict()), 201
 
 
