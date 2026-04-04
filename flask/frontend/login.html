@@ -48,6 +48,12 @@
     </div>
   </div>
 
+  <script>
+    // Apply dark mode before render to avoid flash
+    if (localStorage.getItem('darkMode') === '1') {
+      document.body.classList.add('dark-mode');
+    }
+  </script>
   <script src="js/auth.js"></script>
 </body>
 </html>

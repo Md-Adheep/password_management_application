@@ -165,3 +165,60 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text-main); 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* ─── Favorites star ────────────────────────────────────────────────── */
+.fav-star { opacity: 0.35; transition: opacity 0.15s; }
+.fav-star:hover, .fav-star.active { opacity: 1; }
+
+/* ─── Dark Mode ─────────────────────────────────────────────────────── */
+body.dark-mode {
+  --surface: #0f172a;
+  --card-bg: #1e293b;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --border: #334155;
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+body.dark-mode .stat-card,
+body.dark-mode .pw-card,
+body.dark-mode .card {
+  background: var(--card-bg);
+  border-color: var(--border);
+  color: var(--text-main);
+}
+
+body.dark-mode .card-header { background: #1e293b !important; border-color: var(--border); color: var(--text-main); }
+body.dark-mode .table { color: var(--text-main); }
+body.dark-mode .table-light, body.dark-mode thead.table-light { background-color: #263148 !important; color: var(--text-muted); }
+body.dark-mode .table-hover tbody tr:hover { background-color: rgba(255,255,255,0.04); }
+
+body.dark-mode .form-control,
+body.dark-mode .form-select,
+body.dark-mode .input-group-text {
+  background-color: #263148;
+  color: var(--text-main);
+  border-color: var(--border);
+}
+body.dark-mode .form-control::placeholder { color: #64748b; }
+body.dark-mode .form-control:focus,
+body.dark-mode .form-select:focus { background-color: #263148; color: var(--text-main); border-color: #4f46e5; box-shadow: none; }
+
+body.dark-mode .modal-content {
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-color: var(--border);
+}
+body.dark-mode .modal-header,
+body.dark-mode .modal-footer { border-color: var(--border); }
+body.dark-mode .btn-close { filter: invert(1); }
+
+body.dark-mode .nav-tabs { border-color: var(--border); }
+body.dark-mode .nav-tabs .nav-link { color: var(--text-muted); }
+body.dark-mode .nav-tabs .nav-link.active { background: var(--card-bg); border-color: var(--border); color: var(--text-main); }
+
+body.dark-mode .text-muted { color: var(--text-muted) !important; }
+body.dark-mode .dropdown-menu { background: #1e293b; border-color: var(--border); }
+body.dark-mode .dropdown-item { color: var(--text-main); }
+body.dark-mode .dropdown-item:hover { background: #263148; }

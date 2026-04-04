@@ -47,9 +47,25 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _migrate_columns()
         _seed_admin()
 
     return app
+
+
+def _migrate_columns():
+    """Add new columns to existing tables without Flask-Migrate."""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE password_entries ADD COLUMN is_favorite TINYINT(1) NOT NULL DEFAULT 0",
+    ]
+    with db.engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists
 
 
 def _seed_admin():
