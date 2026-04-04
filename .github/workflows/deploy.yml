@@ -17,6 +17,7 @@ jobs:
           echo "🚀 Triggering deployment to nextgen.codesen.com..."
 
           RESPONSE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            --max-time 30 --connect-timeout 10 \
             -X POST https://nextgen.codesen.com/deploy-webhook \
             -H "X-Deploy-Token: ${{ secrets.DEPLOY_SECRET }}" \
             -H "Content-Type: application/json" \
