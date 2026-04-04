@@ -9,6 +9,8 @@ if (!token || !user || user.role !== 'admin') {
 let editingUserId = null;
 let pendingDeleteId = null;
 
+let pendingDeleteGroupId = null;
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('logout-btn').addEventListener('click', logout);
   loadStats();
@@ -243,6 +245,113 @@ function showToast(msg) {
   setTimeout(() => t.remove(), 2000);
 }
 
+// ─── Admin Tab Switching ─────────────────────────────────────────────
+function switchAdminTab(tab) {
+  document.getElementById('admin-tab-users').classList.toggle('d-none', tab !== 'users');
+  document.getElementById('admin-tab-groups').classList.toggle('d-none', tab !== 'groups');
+  document.querySelectorAll('#admin-tabs .nav-link').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && tab === 'users') || (i === 1 && tab === 'groups'));
+  });
+  if (tab === 'groups') loadAdminGroups();
+}
+
+// ─── Admin Groups ────────────────────────────────────────────────────
+async function loadAdminGroups() {
+  const res = await apiFetch('/groups/');
+  if (!res || !res.ok) return;
+  const groups = await res.json();
+  const tbody = document.getElementById('groups-table');
+  if (!groups.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No teams yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = groups.map(g => `
+    <tr>
+      <td class="fw-semibold">${escHtml(g.name)}</td>
+      <td class="text-muted small">${escHtml(g.description || '—')}</td>
+      <td><span class="badge bg-primary bg-opacity-10 text-primary">${g.member_count}</span></td>
+      <td class="text-muted small">${new Date(g.created_at).toLocaleDateString()}</td>
+      <td class="text-end">
+        <div class="d-flex justify-content-end gap-1">
+          <button class="btn btn-sm btn-outline-secondary" onclick="openEditAdminGroup(${g.id}, '${escHtml(g.name)}', '${escHtml(g.description || '')}')">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <a href="teams.html" class="btn btn-sm btn-outline-primary" title="Manage Members">
+            <i class="bi bi-people"></i>
+          </a>
+          <button class="btn btn-sm btn-outline-danger" onclick="confirmDeleteGroup(${g.id}, '${escHtml(g.name)}')">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openCreateAdminGroup() {
+  document.getElementById('ag-edit-id').value = '';
+  document.getElementById('ag-modal-title').textContent = 'New Team';
+  document.getElementById('ag-save-btn').textContent = 'Create Team';
+  document.getElementById('ag-name').value = '';
+  document.getElementById('ag-desc').value = '';
+  document.getElementById('ag-modal-alert').className = 'alert d-none';
+}
+
+function openEditAdminGroup(id, name, desc) {
+  document.getElementById('ag-edit-id').value = id;
+  document.getElementById('ag-modal-title').textContent = 'Edit Team';
+  document.getElementById('ag-save-btn').textContent = 'Save Changes';
+  document.getElementById('ag-name').value = name;
+  document.getElementById('ag-desc').value = desc;
+  document.getElementById('ag-modal-alert').className = 'alert d-none';
+  new bootstrap.Modal(document.getElementById('adminGroupModal')).show();
+}
+
+async function saveAdminGroup() {
+  const alertEl = document.getElementById('ag-modal-alert');
+  const name = document.getElementById('ag-name').value.trim();
+  const desc = document.getElementById('ag-desc').value.trim();
+  const editId = document.getElementById('ag-edit-id').value;
+  if (!name) {
+    alertEl.className = 'alert alert-danger';
+    alertEl.textContent = 'Team name is required.';
+    return;
+  }
+  const btn = document.getElementById('ag-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  const res = editId
+    ? await apiFetch(`/groups/${editId}`, { method: 'PUT', body: JSON.stringify({ name, description: desc }) })
+    : await apiFetch('/groups/', { method: 'POST', body: JSON.stringify({ name, description: desc }) });
+  btn.disabled = false;
+  btn.textContent = editId ? 'Save Changes' : 'Create Team';
+  if (!res || !res.ok) {
+    let msg = 'Save failed.';
+    try { const e = await res.json(); msg = e.message || msg; } catch (_) {}
+    alertEl.className = 'alert alert-danger';
+    alertEl.textContent = msg;
+    return;
+  }
+  bootstrap.Modal.getInstance(document.getElementById('adminGroupModal')).hide();
+  loadAdminGroups();
+  showToast(editId ? 'Team updated!' : 'Team created!');
+}
+
+function confirmDeleteGroup(id, name) {
+  pendingDeleteGroupId = id;
+  document.getElementById('delete-group-confirm-text').textContent =
+    `Delete team "${name}"? All shared passwords in this team will be deleted.`;
+  document.getElementById('confirm-delete-group-btn').onclick = executeDeleteGroup;
+  new bootstrap.Modal(document.getElementById('deleteGroupModal')).show();
+}
+
+async function executeDeleteGroup() {
+  bootstrap.Modal.getInstance(document.getElementById('deleteGroupModal')).hide();
+  const res = await apiFetch(`/groups/${pendingDeleteGroupId}`, { method: 'DELETE' });
+  if (res && res.ok) { loadAdminGroups(); showToast('Team deleted.'); }
+  else showToast('Delete failed.');
+}
+
+// ─── Logout ──────────────────────────────────────────────────────────
 function logout() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');

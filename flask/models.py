@@ -62,3 +62,87 @@ class PasswordEntry(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
+
+
+# ─── Groups / Teams ───────────────────────────────────────────────────────────
+
+class Group(db.Model):
+    __tablename__ = 'groups'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    created_by  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    members   = db.relationship('GroupMember',   backref='group', lazy=True, cascade='all, delete-orphan')
+    passwords = db.relationship('GroupPassword', backref='group', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id':           self.id,
+            'name':         self.name,
+            'description':  self.description or '',
+            'created_by':   self.created_by,
+            'created_at':   self.created_at.isoformat(),
+            'member_count': len(self.members)
+        }
+
+
+class GroupMember(db.Model):
+    __tablename__ = 'group_members'
+    __table_args__ = (db.UniqueConstraint('group_id', 'user_id'),)
+
+    id        = db.Column(db.Integer, primary_key=True)
+    group_id  = db.Column(db.Integer, db.ForeignKey('groups.id'),  nullable=False)
+    user_id   = db.Column(db.Integer, db.ForeignKey('users.id'),   nullable=False)
+    role      = db.Column(db.Enum('member', 'manager'), default='member', nullable=False)
+    joined_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship('User', backref='group_memberships')
+
+    def to_dict(self):
+        return {
+            'id':        self.id,
+            'group_id':  self.group_id,
+            'user_id':   self.user_id,
+            'username':  self.user.username if self.user else None,
+            'email':     self.user.email    if self.user else None,
+            'role':      self.role,
+            'joined_at': self.joined_at.isoformat()
+        }
+
+
+class GroupPassword(db.Model):
+    __tablename__ = 'group_passwords'
+
+    id                 = db.Column(db.Integer, primary_key=True)
+    group_id           = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
+    added_by           = db.Column(db.Integer, db.ForeignKey('users.id'),  nullable=False)
+    title              = db.Column(db.String(150), nullable=False)
+    username           = db.Column(db.String(150), nullable=True)
+    encrypted_password = db.Column(db.Text, nullable=False)
+    url                = db.Column(db.String(500), nullable=True)
+    notes              = db.Column(db.Text, nullable=True)
+    category           = db.Column(db.String(80), default='General')
+    created_at         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                                   onupdate=lambda: datetime.now(timezone.utc))
+
+    creator = db.relationship('User', foreign_keys=[added_by])
+
+    def to_dict(self, decrypted_password=None):
+        return {
+            'id':         self.id,
+            'group_id':   self.group_id,
+            'added_by':   self.added_by,
+            'added_by_username': self.creator.username if self.creator else None,
+            'title':      self.title,
+            'username':   self.username,
+            'password':   decrypted_password,
+            'url':        self.url,
+            'notes':      self.notes,
+            'category':   self.category,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }

@@ -6,6 +6,7 @@ from extensions import db, bcrypt, jwt, cors
 from routes.auth import auth_bp
 from routes.passwords import passwords_bp
 from routes.admin import admin_bp
+from routes.groups import groups_bp
 from deploy_webhook import deploy_webhook_bp
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -24,6 +25,7 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(passwords_bp, url_prefix='/api/passwords')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(groups_bp, url_prefix='/api/groups')
     app.register_blueprint(deploy_webhook_bp)
 
     # Global error handler — always return JSON
