@@ -249,10 +249,16 @@ function showToast(msg) {
 function switchAdminTab(tab) {
   document.getElementById('admin-tab-users').classList.toggle('d-none', tab !== 'users');
   document.getElementById('admin-tab-groups').classList.toggle('d-none', tab !== 'groups');
+  document.getElementById('admin-tab-passwords').classList.toggle('d-none', tab !== 'passwords');
   document.querySelectorAll('#admin-tabs .nav-link').forEach((btn, i) => {
-    btn.classList.toggle('active', (i === 0 && tab === 'users') || (i === 1 && tab === 'groups'));
+    btn.classList.toggle('active',
+      (i === 0 && tab === 'users') ||
+      (i === 1 && tab === 'groups') ||
+      (i === 2 && tab === 'passwords')
+    );
   });
-  if (tab === 'groups') loadAdminGroups();
+  if (tab === 'groups')    loadAdminGroups();
+  if (tab === 'passwords') loadAllPasswords();
 }
 
 // ─── Admin Groups ────────────────────────────────────────────────────
@@ -349,6 +355,145 @@ async function executeDeleteGroup() {
   const res = await apiFetch(`/groups/${pendingDeleteGroupId}`, { method: 'DELETE' });
   if (res && res.ok) { loadAdminGroups(); showToast('Team deleted.'); }
   else showToast('Delete failed.');
+}
+
+// ─── All Passwords ───────────────────────────────────────────────────
+let allPasswords = [];
+
+async function loadAllPasswords() {
+  const res = await apiFetch('/admin/all-passwords');
+  if (!res || !res.ok) return;
+  allPasswords = await res.json();
+  _populateApFilters();
+  filterAllPasswords();
+}
+
+function _populateApFilters() {
+  // User filter
+  const userSel = document.getElementById('ap-user-filter');
+  const catSel  = document.getElementById('ap-cat-filter');
+  const users = {};
+  const cats  = new Set();
+  allPasswords.forEach(p => {
+    users[p.user_id] = p.owner_username;
+    if (p.category) cats.add(p.category);
+  });
+  userSel.innerHTML = '<option value="">All Users</option>' +
+    Object.entries(users).map(([id, name]) =>
+      `<option value="${id}">${escHtml(name)}</option>`
+    ).join('');
+  catSel.innerHTML = '<option value="">All Categories</option>' +
+    [...cats].sort().map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+}
+
+function filterAllPasswords() {
+  const search  = (document.getElementById('ap-search').value || '').toLowerCase();
+  const userId  = document.getElementById('ap-user-filter').value;
+  const cat     = document.getElementById('ap-cat-filter').value;
+
+  const filtered = allPasswords.filter(p => {
+    const matchSearch = !search ||
+      p.title.toLowerCase().includes(search) ||
+      (p.username || '').toLowerCase().includes(search) ||
+      (p.url || '').toLowerCase().includes(search);
+    const matchUser = !userId || String(p.user_id) === userId;
+    const matchCat  = !cat    || p.category === cat;
+    return matchSearch && matchUser && matchCat;
+  });
+
+  document.getElementById('ap-count').textContent = filtered.length + ' entries';
+  _renderApTable(filtered);
+}
+
+function _renderApTable(entries) {
+  const tbody = document.getElementById('ap-table');
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No passwords found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entries.map(p => `
+    <tr>
+      <td class="fw-semibold">${escHtml(p.title)}</td>
+      <td class="text-muted small">${escHtml(p.username || '—')}</td>
+      <td><span class="badge bg-primary bg-opacity-10 text-primary">${escHtml(p.category || 'General')}</span></td>
+      <td>
+        <div class="d-flex align-items-center gap-1">
+          <div class="rounded-circle bg-warning bg-opacity-25 d-flex align-items-center justify-content-center"
+               style="width:26px;height:26px;font-size:0.75rem;font-weight:700;color:#92400e">
+            ${escHtml((p.owner_username || '?').charAt(0).toUpperCase())}
+          </div>
+          <span class="small">${escHtml(p.owner_username || '?')}</span>
+        </div>
+      </td>
+      <td class="text-muted small">
+        ${p.url ? `<a href="${escHtml(p.url)}" target="_blank" rel="noopener" class="text-truncate d-inline-block" style="max-width:120px">${escHtml(p.url)}</a>` : '—'}
+      </td>
+      <td class="text-muted small">${new Date(p.updated_at).toLocaleDateString()}</td>
+      <td class="text-end">
+        <div class="d-flex justify-content-end gap-1">
+          <button class="btn btn-sm btn-outline-primary" onclick="viewApPassword(${p.id})" title="View">
+            <i class="bi bi-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deleteApPassword(${p.id}, '${escHtml(p.title)}')" title="Delete">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function viewApPassword(id) {
+  const p = allPasswords.find(x => x.id === id);
+  if (!p) return;
+
+  document.getElementById('ap-view-title').textContent = p.title;
+  document.getElementById('ap-view-body').innerHTML = `
+    <div class="alert alert-warning py-2 small mb-3">
+      <i class="bi bi-person-fill me-1"></i>
+      Owner: <strong>${escHtml(p.owner_username)}</strong> (${escHtml(p.owner_email)})
+    </div>
+    <div class="view-field"><label>Username</label>
+      <div class="value">${escHtml(p.username || '—')}</div></div>
+    <div class="view-field"><label>Password</label>
+      <div class="input-group">
+        <input type="password" class="form-control form-control-sm font-monospace"
+               id="ap-pw-field-${id}" value="••••••••" readonly />
+        <button class="btn btn-sm btn-outline-secondary" onclick="revealApPassword(${id})">
+          <i class="bi bi-eye"></i>
+        </button>
+      </div>
+    </div>
+    ${p.url ? `<div class="view-field"><label>URL</label>
+      <div class="value"><a href="${escHtml(p.url)}" target="_blank" rel="noopener">${escHtml(p.url)}</a></div></div>` : ''}
+    ${p.category ? `<div class="view-field"><label>Category</label>
+      <div class="value"><span class="pw-card-badge">${escHtml(p.category)}</span></div></div>` : ''}
+    ${p.notes ? `<div class="view-field"><label>Notes</label>
+      <div class="value">${escHtml(p.notes)}</div></div>` : ''}
+    <div class="view-field"><label>Last Updated</label>
+      <div class="value text-muted small">${new Date(p.updated_at).toLocaleString()}</div></div>
+  `;
+  new bootstrap.Modal(document.getElementById('apViewModal')).show();
+}
+
+async function revealApPassword(id) {
+  const res = await apiFetch('/admin/all-passwords/' + id + '/decrypt');
+  if (!res || !res.ok) { showToast('Failed to decrypt'); return; }
+  const data = await res.json();
+  const field = document.getElementById('ap-pw-field-' + id);
+  if (field) { field.type = 'text'; field.value = data.password; }
+}
+
+async function deleteApPassword(id, title) {
+  if (!confirm('Delete password "' + title + '"?')) return;
+  const res = await apiFetch('/admin/all-passwords/' + id, { method: 'DELETE' });
+  if (res && res.ok) {
+    allPasswords = allPasswords.filter(p => p.id !== id);
+    filterAllPasswords();
+    showToast('Password deleted.');
+  } else {
+    showToast('Delete failed.');
+  }
 }
 
 // ─── Logout ──────────────────────────────────────────────────────────

@@ -42,6 +42,11 @@
           <i class="bi bi-diagram-3 me-1"></i>Teams
         </button>
       </li>
+      <li class="nav-item">
+        <button class="nav-link" onclick="switchAdminTab('passwords')">
+          <i class="bi bi-key me-1"></i>All Passwords
+        </button>
+      </li>
     </ul>
 
     <!-- ── Users Tab ─────────────────────────────────────────────────── -->
@@ -133,6 +138,63 @@
       </div>
     </div><!-- end #admin-tab-groups -->
 
+    <!-- ── All Passwords Tab ─────────────────────────────────────────── -->
+    <div id="admin-tab-passwords" class="d-none">
+
+      <!-- Filters -->
+      <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+        <div class="input-group" style="max-width:260px">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control" id="ap-search" placeholder="Search title..." oninput="filterAllPasswords()" />
+        </div>
+        <select class="form-select w-auto" id="ap-user-filter" onchange="filterAllPasswords()">
+          <option value="">All Users</option>
+        </select>
+        <select class="form-select w-auto" id="ap-cat-filter" onchange="filterAllPasswords()">
+          <option value="">All Categories</option>
+        </select>
+        <span class="ms-auto text-muted small" id="ap-count"></span>
+      </div>
+
+      <!-- Table -->
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Title</th>
+                  <th>Username</th>
+                  <th>Category</th>
+                  <th>Owner</th>
+                  <th>URL</th>
+                  <th>Updated</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ap-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div><!-- end #admin-tab-passwords -->
+
+  </div>
+
+  <!-- View Password Modal (Admin) -->
+  <div class="modal fade" id="apViewModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="ap-view-title">Password Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="ap-view-body"></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Create / Edit Group Modal (Admin) -->
