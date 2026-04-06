@@ -37,6 +37,10 @@ def create_app():
         app.logger.error(f'Unhandled exception: {e}', exc_info=True)
         return jsonify({'message': 'An internal server error occurred.'}), 500
 
+    @app.route('/health')
+    def health():
+        return jsonify({'status': 'ok'}), 200
+
     @app.route('/')
     def index():
         return send_from_directory(app.static_folder, 'login.html')

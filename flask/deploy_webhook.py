@@ -1,157 +1,358 @@
 """
-deploy_webhook.py — Flask Blueprint for Plesk auto-deployment
+deploy_webhook.py — Releases-based auto-deployment with rollback support.
 
-Receives POST from GitHub Actions, validates the token, returns 200 immediately,
-then runs the actual deployment in a background thread (download → copy → pip → restart).
+Directory layout on the server (relative to httpdocs/):
+    flask/                  ← live app (Passenger serves this) = BASE_DIR
+    releases/
+        20240101_120000/    ← old release
+        20240103_140000/    ← current release
+    current_release         ← text file: name of active release
 
-Register in app.py:
-    from deploy_webhook import deploy_webhook_bp
-    app.register_blueprint(deploy_webhook_bp)
+Flow:
+    GitHub push → Actions → POST /deploy-webhook
+    → background thread:
+        1. Download repo ZIP
+        2. Extract → releases/<timestamp>/
+        3. pip install
+        4. Sync release → flask/  (atomic-ish, fast)
+        5. Restart Passenger
+        6. Health check  → auto-rollback if fails
+        7. Cleanup old releases (keep last 5)
+
+Protected files (never overwritten):
+    deploy_webhook.py, .env, config.py, deploy.log
 """
 
-import os
 import hmac
 import logging
-import zipfile
+import os
 import shutil
-import tempfile
 import subprocess
+import tempfile
 import threading
+import time
+import urllib.request
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
-import urllib.request
 from flask import Blueprint, request, jsonify
 
-# ─── Config ───────────────────────────────────────────────────────────────────
-BASE_DIR = Path(__file__).resolve().parent
+# ─── Paths ────────────────────────────────────────────────────────────────────
+BASE_DIR     = Path(__file__).resolve().parent           # httpdocs/flask/
+APP_ROOT     = BASE_DIR.parent                           # httpdocs/
+RELEASES_DIR = APP_ROOT / "releases"                     # httpdocs/releases/
+KEEP_RELEASES = 5
 
+# ─── GitHub ───────────────────────────────────────────────────────────────────
 GITHUB_USERNAME = "Md-Adheep"
 GITHUB_REPO     = "password_management_application"
-ZIP_URL         = f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO}/archive/refs/heads/main.zip"
+ZIP_URL         = (
+    f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO}"
+    f"/archive/refs/heads/main.zip"
+)
 
-PROTECTED_FILES = {
-    "deploy_webhook.py",
-    ".env",
-    "deploy.log",
-    "config.py",
-}
+# ─── Protected files (never overwritten during any deploy or rollback) ────────
+PROTECTED_FILES = {"deploy_webhook.py", ".env", "config.py", "deploy.log"}
+
+# ─── Health check ─────────────────────────────────────────────────────────────
+HEALTH_URL     = os.environ.get("HEALTH_CHECK_URL", "https://nextgen.codesen.com/health")
+HEALTH_TIMEOUT = 15   # seconds to wait for a single probe
+RESTART_WAIT   = 8    # seconds to let Passenger come back up before probing
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 LOG_FILE = BASE_DIR / "deploy.log"
 logging.basicConfig(
     level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
+    format="[%(asctime)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler(),
-    ]
+    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
 )
-log = logging.getLogger("deploy")
+_logger = logging.getLogger("deploy")
+
+
+def _log(msg: str) -> None:
+    _logger.info(msg)
+
 
 # ─── Blueprint ────────────────────────────────────────────────────────────────
 deploy_webhook_bp = Blueprint("deploy_webhook", __name__)
 
 
-def _log(msg):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a") as f:
-        f.write(f"[{timestamp}] {msg}\n")
-    print(f"[{timestamp}] {msg}")
+# ══════════════════════════════════════════════════════════════════════════════
+# Internal helpers
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_releases() -> list[str]:
+    """Return release names sorted oldest → newest."""
+    if not RELEASES_DIR.exists():
+        return []
+    return sorted(
+        d.name for d in RELEASES_DIR.iterdir() if d.is_dir()
+    )
 
 
-def _run_deploy(branch, commit, pusher):
-    """Runs the full deployment. Called in a background thread."""
-    _log(f"[DEPLOY START] branch={branch} commit={commit} pusher={pusher}")
+def _get_current_release() -> str | None:
+    marker = APP_ROOT / "current_release"
+    return marker.read_text().strip() if marker.exists() else None
+
+
+def _set_current_release(name: str) -> None:
+    (APP_ROOT / "current_release").write_text(name)
+
+
+def _restart_app() -> None:
+    """Touch tmp/restart.txt to trigger Passenger reload."""
+    tmp_dir = BASE_DIR / "tmp"
+    tmp_dir.mkdir(exist_ok=True)
+    (tmp_dir / "restart.txt").touch()
+    _log("[RESTART] Touched tmp/restart.txt — Passenger will reload")
+
+
+def _health_check() -> bool:
+    """Return True if the live app responds 200 at HEALTH_URL."""
     try:
-        # 1. Download ZIP
+        with urllib.request.urlopen(HEALTH_URL, timeout=HEALTH_TIMEOUT) as resp:
+            ok = resp.status == 200
+            _log(f"[HEALTH] {HEALTH_URL} → HTTP {resp.status} ({'ok' if ok else 'FAIL'})")
+            return ok
+    except Exception as exc:
+        _log(f"[HEALTH] Probe failed: {exc}")
+        return False
+
+
+def _sync_to_live(release_dir: Path) -> int:
+    """
+    Copy all non-protected files from release_dir → BASE_DIR.
+    Returns the number of files written.
+    """
+    count = 0
+    for item in release_dir.rglob("*"):
+        if not item.is_file():
+            continue
+        relative = item.relative_to(release_dir)
+        if relative.name in PROTECTED_FILES:
+            continue
+        if "__pycache__" in relative.parts:
+            continue
+        dest = BASE_DIR / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(item, dest)
+        count += 1
+    return count
+
+
+def _cleanup_releases(current: str) -> None:
+    """Delete oldest releases, keeping at most KEEP_RELEASES (never delete current)."""
+    releases = _get_releases()
+    candidates = [r for r in releases if r != current]
+    to_delete  = candidates[:-KEEP_RELEASES] if len(candidates) >= KEEP_RELEASES else []
+    for name in to_delete:
+        shutil.rmtree(RELEASES_DIR / name, ignore_errors=True)
+        _log(f"[CLEANUP] Removed old release: {name}")
+
+
+def _do_rollback(release_name: str) -> bool:
+    """
+    Restore release_name to the live app directory and restart.
+    Returns True on success.
+    """
+    release_dir = RELEASES_DIR / release_name
+    if not release_dir.exists():
+        _log(f"[ROLLBACK] Release directory not found: {release_name}")
+        return False
+
+    _log(f"[ROLLBACK] Restoring release: {release_name}")
+    count = _sync_to_live(release_dir)
+    _set_current_release(release_name)
+    _restart_app()
+    _log(f"[ROLLBACK] Done — {count} files restored from {release_name}")
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Main deploy logic  (runs in background thread)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _run_deploy(branch: str, commit: str, pusher: str) -> None:
+    release_name = datetime.now().strftime("%Y%m%d_%H%M%S")
+    release_dir  = RELEASES_DIR / release_name
+
+    _log("=" * 60)
+    _log(f"[DEPLOY START] branch={branch} commit={commit} pusher={pusher}")
+    _log(f"[RELEASE] {release_name}")
+
+    try:
+        # ── 1. Create release directory ───────────────────────────────────────
+        RELEASES_DIR.mkdir(parents=True, exist_ok=True)
+        release_dir.mkdir()
+
+        # ── 2. Download repo ZIP ──────────────────────────────────────────────
         _log(f"[DOWNLOAD] {ZIP_URL}")
         tmp_fd, tmp_zip = tempfile.mkstemp(suffix=".zip")
         os.close(tmp_fd)
         urllib.request.urlretrieve(ZIP_URL, tmp_zip)
-        _log(f"[DOWNLOAD] Complete")
+        _log("[DOWNLOAD] Complete")
 
-        # 2. Extract
+        # ── 3. Extract ────────────────────────────────────────────────────────
         extract_dir = tempfile.mkdtemp()
-        with zipfile.ZipFile(tmp_zip, "r") as z:
-            z.extractall(extract_dir)
+        with zipfile.ZipFile(tmp_zip, "r") as zf:
+            zf.extractall(extract_dir)
         os.remove(tmp_zip)
 
-        # 3. Find flask/ inside extracted repo
-        repo_root  = Path(extract_dir) / f"{GITHUB_REPO}-main"
-        source_dir = repo_root / "flask"
+        # ── 4. Locate flask/ inside extracted repo ────────────────────────────
+        source_dir = Path(extract_dir) / f"{GITHUB_REPO}-main" / "flask"
         if not source_dir.exists():
-            raise FileNotFoundError(f"flask/ folder not found in ZIP: {source_dir}")
+            raise FileNotFoundError(f"flask/ not found inside ZIP at {source_dir}")
 
-        # 4. Copy files, skipping protected ones
-        files_copied = []
+        # ── 5. Populate release directory (skip protected files) ──────────────
+        files_extracted = 0
         for item in source_dir.rglob("*"):
             if not item.is_file():
                 continue
             relative = item.relative_to(source_dir)
-            if relative.name in PROTECTED_FILES:
-                _log(f"[SKIP] Protected: {relative}")
+            if relative.name in PROTECTED_FILES or "__pycache__" in relative.parts:
                 continue
-            if "__pycache__" in relative.parts:
-                continue
-            dest = BASE_DIR / relative
+            dest = release_dir / relative
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest)
-            files_copied.append(str(relative))
-
+            files_extracted += 1
         shutil.rmtree(extract_dir)
-        _log(f"[COPY] {len(files_copied)} files copied")
+        _log(f"[EXTRACT] {files_extracted} files → {release_dir.name}")
 
-        # 5. pip install
-        req_file = BASE_DIR / "requirements.txt"
+        # ── 6. pip install inside release ─────────────────────────────────────
+        req_file = release_dir / "requirements.txt"
         if req_file.exists():
             _log("[PIP] Installing requirements...")
-            subprocess.run(
+            result = subprocess.run(
                 ["pip", "install", "-r", str(req_file), "--quiet"],
-                check=True, capture_output=True
+                capture_output=True, text=True
             )
+            if result.returncode != 0:
+                raise RuntimeError(f"pip install failed:\n{result.stderr.strip()}")
             _log("[PIP] Done")
 
-        # 6. Restart Passenger
-        tmp_dir = BASE_DIR / "tmp"
-        tmp_dir.mkdir(exist_ok=True)
-        (tmp_dir / "restart.txt").touch()
-        _log("[RESTART] Touched tmp/restart.txt")
+        # ── 7. Record previous release (needed for auto-rollback) ─────────────
+        previous_release = _get_current_release()
+        _log(f"[PREV] Previous release: {previous_release or 'none'}")
 
-        _log(f"[DEPLOY DONE] {len(files_copied)} files from commit {commit}")
+        # ── 8. Sync release → live directory ──────────────────────────────────
+        _log("[SYNC] Deploying to live directory...")
+        files_deployed = _sync_to_live(release_dir)
+        _log(f"[SYNC] {files_deployed} files written to {BASE_DIR}")
 
-    except Exception as e:
-        _log(f"[ERROR] Deployment failed: {e}")
+        # ── 9. Mark as current & restart ──────────────────────────────────────
+        _set_current_release(release_name)
+        _restart_app()
 
+        # ── 10. Health check ──────────────────────────────────────────────────
+        _log(f"[HEALTH] Waiting {RESTART_WAIT}s for app to restart...")
+        time.sleep(RESTART_WAIT)
+
+        if _health_check():
+            _log("[HEALTH] ✓ App is healthy")
+        else:
+            _log("[HEALTH] ✗ Health check failed — initiating auto-rollback")
+            if previous_release:
+                success = _do_rollback(previous_release)
+                if success:
+                    _log(f"[ROLLBACK] Auto-rollback to {previous_release} succeeded")
+                else:
+                    _log("[ROLLBACK] Auto-rollback also failed — manual intervention needed")
+            else:
+                _log("[ROLLBACK] No previous release — cannot auto-rollback")
+            return
+
+        # ── 11. Cleanup old releases ──────────────────────────────────────────
+        _cleanup_releases(current=release_name)
+
+        _log(f"[DEPLOY DONE] Release {release_name} is live  ({files_deployed} files)")
+        _log("=" * 60)
+
+    except Exception as exc:
+        _log(f"[ERROR] Deployment failed: {exc}")
+        # Remove the failed (partial) release directory
+        if release_dir.exists():
+            shutil.rmtree(release_dir, ignore_errors=True)
+            _log(f"[CLEANUP] Removed failed release dir: {release_name}")
+        _log("=" * 60)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Routes
+# ══════════════════════════════════════════════════════════════════════════════
 
 @deploy_webhook_bp.route("/deploy-webhook", methods=["POST"])
 def deploy_webhook():
-    # 1. Validate token
+    # ── Validate token ────────────────────────────────────────────────────────
     deploy_secret = os.environ.get("DEPLOY_SECRET", "")
     if not deploy_secret:
-        _log("[ERROR] DEPLOY_SECRET not set")
+        _log("[ERROR] DEPLOY_SECRET not configured")
         return jsonify({"success": False, "message": "Server misconfigured"}), 500
 
-    incoming_token = request.headers.get("X-Deploy-Token", "")
-    if not hmac.compare_digest(incoming_token, deploy_secret):
-        _log("[WARN] Rejected — invalid token")
+    incoming = request.headers.get("X-Deploy-Token", "")
+    if not hmac.compare_digest(incoming, deploy_secret):
+        _log("[WARN] Rejected request — invalid X-Deploy-Token")
         return jsonify({"success": False, "message": "Forbidden"}), 403
 
-    # 2. Parse body
+    # ── Parse body ────────────────────────────────────────────────────────────
     data   = request.get_json(silent=True) or {}
     branch = data.get("branch", "unknown")
     commit = data.get("commit", "unknown")[:7]
     pusher = data.get("pusher", "unknown")
 
-    # 3. Start deployment in background — return 200 immediately
-    t = threading.Thread(target=_run_deploy, args=(branch, commit, pusher), daemon=True)
-    t.start()
+    # ── Launch background deploy, return 200 immediately ─────────────────────
+    threading.Thread(
+        target=_run_deploy, args=(branch, commit, pusher), daemon=True
+    ).start()
 
-    _log(f"[QUEUED] Deployment started in background for commit {commit}")
+    _log(f"[QUEUED] Deploy queued — commit={commit} pusher={pusher}")
     return jsonify({
         "success": True,
-        "branch":  branch,
-        "commit":  commit,
-        "message": "Deployment started in background. Check deploy.log for progress."
+        "release": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "message": "Deployment started in background. Check deploy.log for progress.",
+    }), 200
+
+
+@deploy_webhook_bp.route("/rollback-api", methods=["POST"])
+def rollback_api():
+    """
+    API rollback (alternative to rollback.sh).
+
+    Body (JSON):
+        { "release": "20240101_120000" }   ← specific release
+        {}                                  ← rolls back to previous release
+    """
+    deploy_secret = os.environ.get("DEPLOY_SECRET", "")
+    incoming = request.headers.get("X-Deploy-Token", "")
+    if not deploy_secret or not hmac.compare_digest(incoming, deploy_secret):
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+
+    releases = _get_releases()
+    if not releases:
+        return jsonify({"success": False, "message": "No releases available"}), 400
+
+    data    = request.get_json(silent=True) or {}
+    target  = data.get("release")
+    current = _get_current_release()
+
+    if target:
+        if target not in releases:
+            return jsonify({"success": False, "message": f"Release '{target}' not found"}), 404
+        rollback_to = target
+    else:
+        # Roll back to the release before current
+        if current in releases:
+            idx = releases.index(current)
+            if idx == 0:
+                return jsonify({"success": False, "message": "Already at oldest release"}), 400
+            rollback_to = releases[idx - 1]
+        else:
+            rollback_to = releases[-1]
+
+    threading.Thread(target=_do_rollback, args=(rollback_to,), daemon=True).start()
+    return jsonify({
+        "success": True,
+        "rollback_to": rollback_to,
+        "message": f"Rolling back to {rollback_to}. Check deploy.log.",
     }), 200
