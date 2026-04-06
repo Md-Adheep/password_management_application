@@ -1,0 +1,52 @@
+# ── Python bytecode ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.env/
+
+# ── Secrets — NEVER bake into the image ──────────────────────────────────────
+.env
+*.env
+!.env.docker.example
+
+# ── Plesk / Passenger-specific (not used in Docker) ──────────────────────────
+passenger_wsgi.py
+rollback.sh
+tmp/
+deploy.log
+
+# ── Git & CI ─────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+.gitattributes
+
+# ── Docs & local tooling ──────────────────────────────────────────────────────
+*.md
+LICENSE
+DEPLOY_SETUP.md
+
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Test artifacts ────────────────────────────────────────────────────────────
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
