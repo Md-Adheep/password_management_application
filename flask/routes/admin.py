@@ -3,6 +3,7 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
 from functools import wraps
 from extensions import db
 from models import User, PasswordEntry
+from utils.encryption import decrypt_password
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -99,6 +100,60 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return jsonify({'message': 'User deleted successfully'}), 200
+
+
+@admin_bp.route('/all-passwords', methods=['GET'])
+@admin_required
+def get_all_passwords():
+    """Return every password entry across all users with owner info."""
+    user_id  = request.args.get('user_id', type=int)
+    category = request.args.get('category', '').strip()
+    search   = request.args.get('search', '').strip()
+
+    query = PasswordEntry.query
+    if user_id:
+        query = query.filter_by(user_id=user_id)
+    if category:
+        query = query.filter_by(category=category)
+    if search:
+        query = query.filter(PasswordEntry.title.ilike('%{}%'.format(search)))
+
+    entries = query.order_by(PasswordEntry.updated_at.desc()).all()
+
+    result = []
+    for e in entries:
+        d = e.to_dict()
+        owner = User.query.get(e.user_id)
+        d['owner_username'] = owner.username if owner else '?'
+        d['owner_email']    = owner.email    if owner else '?'
+        result.append(d)
+
+    return jsonify(result), 200
+
+
+@admin_bp.route('/all-passwords/<int:entry_id>/decrypt', methods=['GET'])
+@admin_required
+def decrypt_any_password(entry_id):
+    """Admin can decrypt any user's password."""
+    entry = PasswordEntry.query.get(entry_id)
+    if not entry:
+        return jsonify({'message': 'Entry not found'}), 404
+    try:
+        return jsonify({'password': decrypt_password(entry.encrypted_password)}), 200
+    except Exception:
+        return jsonify({'message': 'Failed to decrypt password'}), 500
+
+
+@admin_bp.route('/all-passwords/<int:entry_id>', methods=['DELETE'])
+@admin_required
+def delete_any_password(entry_id):
+    """Admin can delete any user's password."""
+    entry = PasswordEntry.query.get(entry_id)
+    if not entry:
+        return jsonify({'message': 'Entry not found'}), 404
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({'message': 'Deleted'}), 200
 
 
 @admin_bp.route('/stats', methods=['GET'])
