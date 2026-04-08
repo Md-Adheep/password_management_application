@@ -59,35 +59,34 @@ function renderGroups(groups) {
   empty.classList.add('d-none');
   grid.innerHTML = groups.map(g => `
     <div class="col-sm-6 col-lg-4">
-      <div class="card border-0 shadow-sm h-100 group-card" style="cursor:pointer" onclick="openGroupDetail(${g.id}, ${JSON.stringify(g).replace(/"/g, '&quot;')})">
-        <div class="card-body">
-          <div class="d-flex align-items-start justify-content-between">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <div class="rounded-circle d-flex align-items-center justify-content-center"
-                   style="width:40px;height:40px;background:var(--primary-light);color:var(--primary);font-weight:700;font-size:1.1rem">
-                ${escHtml(g.name.charAt(0).toUpperCase())}
-              </div>
-              <div>
-                <div class="fw-semibold">${escHtml(g.name)}</div>
-                <div class="text-muted small">${g.member_count} member${g.member_count !== 1 ? 's' : ''}</div>
-              </div>
-            </div>
-            ${isAdmin ? `
-            <div class="dropdown" onclick="event.stopPropagation()">
-              <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
-                <i class="bi bi-three-dots-vertical"></i>
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="#" onclick="openEditGroup(${g.id}, '${escHtml(g.name)}', '${escHtml(g.description || '')}')">
-                  <i class="bi bi-pencil me-2"></i>Edit
-                </a></li>
-                <li><a class="dropdown-item text-danger" href="#" onclick="deleteGroup(${g.id}, '${escHtml(g.name)}')">
-                  <i class="bi bi-trash me-2"></i>Delete
-                </a></li>
-              </ul>
-            </div>` : ''}
+      <div class="team-card" onclick="openGroupDetail(${g.id}, ${JSON.stringify(g).replace(/"/g, '&quot;')})">
+        <div class="d-flex align-items-start justify-content-between">
+          <div class="team-card-icon">${escHtml(g.name.charAt(0).toUpperCase())}</div>
+          ${isAdmin ? `
+          <div class="dropdown" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown" style="border-radius:8px">
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" onclick="openEditGroup(${g.id}, '${escHtml(g.name)}', '${escHtml(g.description || '')}')">
+                <i class="bi bi-pencil me-2"></i>Edit
+              </a></li>
+              <li><a class="dropdown-item text-danger" href="#" onclick="deleteGroup(${g.id}, '${escHtml(g.name)}')">
+                <i class="bi bi-trash me-2"></i>Delete
+              </a></li>
+            </ul>
+          </div>` : ''}
+        </div>
+        <div class="team-card-name">${escHtml(g.name)}</div>
+        <div class="team-card-desc">${escHtml(g.description || 'No description')}</div>
+        <div class="team-card-footer">
+          <div class="team-member-badge">
+            <i class="bi bi-people-fill text-primary"></i>
+            ${g.member_count} member${g.member_count !== 1 ? 's' : ''}
           </div>
-          ${g.description ? `<p class="text-muted small mb-0">${escHtml(g.description)}</p>` : ''}
+          <span class="badge" style="background:var(--primary-light);color:var(--primary);font-size:0.7rem;border-radius:8px">
+            <i class="bi bi-arrow-right-short"></i>View
+          </span>
         </div>
       </div>
     </div>

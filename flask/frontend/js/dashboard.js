@@ -11,7 +11,7 @@ let showFavoritesOnly = false;
 
 // ─── Init ────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('nav-username').textContent = `${user.username} (${user.role})`;
+  document.getElementById('nav-username').textContent = user.username;
   if (user.role === 'admin') {
     document.getElementById('admin-link').classList.remove('d-none');
   }
