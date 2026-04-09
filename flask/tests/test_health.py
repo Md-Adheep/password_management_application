@@ -1,18 +1,22 @@
 """
-Basic smoke tests for CorpVault.
-These run in CI (GitHub Actions) on every push to catch regressions early.
+CI smoke tests for CorpVault.
+Uses SQLite in-memory so no MySQL server is needed in GitHub Actions.
 """
-import pytest
-import sys
 import os
+import sys
+import pytest
 
-# Make sure the flask/ directory is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-os.environ.setdefault('SECRET_KEY', 'test-secret-key')
-os.environ.setdefault('JWT_SECRET_KEY', 'test-jwt-secret')
-os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
-os.environ.setdefault('DEPLOY_SECRET', 'test-deploy-secret')
+# ── Set env vars BEFORE importing Config or create_app ───────────────────────
+# Config and encryption.py read these at import/call time.
+# ENCRYPTION_KEY must be a valid 32-byte URL-safe base64 Fernet key.
+os.environ.setdefault('ENCRYPTION_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=')
+os.environ.setdefault('SECRET_KEY', 'ci-test-secret')
+os.environ.setdefault('JWT_SECRET_KEY', 'ci-test-jwt-secret')
+
+from config import Config  # noqa: E402
+Config.SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
 
 
 @pytest.fixture
@@ -25,7 +29,7 @@ def client():
         yield c
 
 
-# ── Health check ─────────────────────────────────────────────────────────────
+# ── Health check ──────────────────────────────────────────────────────────────
 
 def test_health_check(client):
     """GET /health must return 200 and {"status": "ok"}."""
@@ -34,7 +38,7 @@ def test_health_check(client):
     assert response.get_json()['status'] == 'ok'
 
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
+# ── Auth ──────────────────────────────────────────────────────────────────────
 
 def test_login_missing_fields(client):
     """POST /api/auth/login with empty body must return 400 or 401."""
@@ -63,7 +67,7 @@ def test_login_returns_json(client):
 # ── Static frontend ───────────────────────────────────────────────────────────
 
 def test_root_serves_login_page(client):
-    """GET / must serve login.html (200)."""
+    """GET / must serve login.html with status 200."""
     response = client.get('/')
     assert response.status_code == 200
 
