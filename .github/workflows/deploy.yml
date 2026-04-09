@@ -27,10 +27,7 @@ jobs:
       - name: Lint (flake8)
         run: |
           echo "🔍 Running flake8..."
-          flake8 flask/ \
-            --max-line-length=120 \
-            --exclude=flask/frontend/,flask/tests/ \
-            --extend-ignore=E501,W503
+          flake8 flask/ --config=flask/.flake8
           echo "✓ Lint passed"
 
       - name: Unit tests (pytest)

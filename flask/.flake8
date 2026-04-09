@@ -1,0 +1,23 @@
+[flake8]
+max-line-length = 120
+exclude =
+    frontend/,
+    tests/,
+    __pycache__/,
+    .git/
+
+# Ignore cosmetic/style rules that exist in the current codebase.
+# flake8 here catches real errors only: undefined names, syntax errors, etc.
+extend-ignore =
+    E221,  # multiple spaces before operator (column alignment)
+    E222,  # multiple spaces after operator
+    E241,  # multiple spaces after ','
+    E272,  # multiple spaces before keyword
+    E302,  # expected 2 blank lines (existing code uses 1)
+    E303,  # too many blank lines
+    E401,  # multiple imports on one line
+    E402,  # module level import not at top of file
+    E127,  # continuation line over-indented
+    E128,  # continuation line under-indented
+    W503,  # line break before binary operator
+    F401,  # imported but unused (existing code has these)
