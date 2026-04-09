@@ -1,15 +1,56 @@
-name: Deploy to Plesk
+name: CorpVault CI/CD Pipeline
 
-# Only trigger when code is pushed to main branch
-# Feature branch pushes will NOT trigger this workflow
 on:
   push:
-    branches:
-      - main
+    branches: ['**']       # CI gate runs on ALL branches
+  pull_request:
+    branches: [main]
 
 jobs:
-  deploy:
+
+  # ── Job 1: CI Gate ── runs on every push, every branch ──────────────────────
+  ci-gate:
+    name: Lint · Test · Security
     runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r flask/requirements.txt flake8 pytest pip-audit
+
+      - name: Lint (flake8)
+        run: |
+          echo "🔍 Running flake8..."
+          flake8 flask/ \
+            --max-line-length=120 \
+            --exclude=flask/frontend/,flask/tests/ \
+            --extend-ignore=E501,W503
+          echo "✓ Lint passed"
+
+      - name: Unit tests (pytest)
+        run: |
+          echo "🧪 Running tests..."
+          cd flask && pytest tests/ -v --tb=short
+          echo "✓ Tests passed"
+
+      - name: Security scan (pip-audit)
+        run: |
+          echo "🔒 Running pip-audit..."
+          pip-audit -r flask/requirements.txt || true
+          echo "✓ Security scan complete"
+
+  # ── Job 2: Deploy to Production ── only on main, only if CI passes ──────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: ci-gate
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Trigger Plesk Webhook
